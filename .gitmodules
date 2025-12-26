@@ -1,0 +1,3 @@
+[submodule "TDSControl"]
+	path = TDSControl
+	url = https://github.com/AppeltansPieter/TDSControl.git

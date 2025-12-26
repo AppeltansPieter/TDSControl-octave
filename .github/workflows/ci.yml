@@ -1,0 +1,114 @@
+name: Octave CI
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+  release:
+    types: [created]
+
+jobs:
+  build-octave:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: "Build octave lib on ${{ matrix.os}}"
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+        submodules: true
+
+    # --------------------
+    # Linux
+    # --------------------
+    - name: Install Octave (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          octave \
+          octave-dev \
+          cmake \
+          g++
+
+    # --------------------
+    # macOS
+    # --------------------
+    - name: Install Octave (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew update
+        brew install octave cmake
+
+    # --------------------
+    # Windows (MSYS2)
+    # --------------------
+    - name: Install MSYS2
+      if: runner.os == 'Windows'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >
+          mingw-w64-x86_64-octave
+          mingw-w64-x86_64-cmake
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-ninja
+          zip
+
+    # --------------------
+    # Configure
+    # --------------------
+    - name: Configure (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cmake -S . -B build -DBUILD_TESTING=OFF\
+          -DCMAKE_BUILD_TYPE=Release
+
+    - name: Configure (Windows / MSYS2)
+      if: runner.os == 'Windows'
+      shell: msys2 {0}
+      run: |
+        cmake -S . -B build -DBUILD_TESTING=OFF\
+          -DCMAKE_BUILD_TYPE=Release
+
+    # --------------------
+    # Build
+    # --------------------
+    - name: Build (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cmake --build build --config Release
+
+    - name: Build (Windows / MSYS2)
+      if: runner.os == 'Windows'
+      shell: msys2 {0}
+      run: |
+        cmake --build build --config Release
+    - name: Stage Octave package (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        mkdir -p package/tds-control
+        cp build/*.oct package/tds-control/
+        cp src/*.m package/tds-control/
+        cd package
+        zip -r ../tds-control-${{ runner.os }}.zip tds-control
+    - name: Stage Octave package (Windows)
+      if: runner.os == 'Windows'
+      shell: msys2 {0}
+      run: |
+        mkdir -p package/tds-control
+        cp build/*.oct package/tds-control/
+        cp octave/*.m package/tds-control/
+        cd package
+        zip -r ../tds-control-${{ runner.os }}.zip tds-control
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: tds-control-${{ matrix.os }}
+        path: ./tds-control-${{ runner.os }}.zip
